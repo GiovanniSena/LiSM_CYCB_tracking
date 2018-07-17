@@ -18,7 +18,7 @@ class io_manager(object):
         #self._root_ = "./test/"
         #pass in the context with settings and runtime context
         self._ctx = options
-        self._log_to_file=False if "logging" not in options else options["logging"] == "file"
+        #self._log_to_file=False if "logging" not in options else options["logging"] == "file"
         #we should always have a folder to process but default to root
         self._data_dir = self._root if not "proc_dir" in options else options["proc_dir"]
         
@@ -142,7 +142,7 @@ class io_manager(object):
         #iterate the (open) range
         for i in range(self._ctx["First_good_index"], self._ctx["Max_good_index"]+1):
             #update the context frame state (although we should minimize used of this if we can)
-            self._ctx._index = i
+            
             if i in self._ctx["Frame_gaps"]:  
                 self.log_message("Filling a frame gap using last frame that we loaded properly")
                 self.log_stat({"frame_missing":1})
@@ -152,7 +152,8 @@ class io_manager(object):
                 yield i
                 
     def __iter__(self):
-        for index in self.__file_indices_with_filled_gaps(): yield self._get_stack_(index)
+        for index in self.__file_indices_with_filled_gaps(): 
+            yield index, self._get_stack_(index)
         
     def draw_bounding_box(self, ax, rect):
         inlay = 10
@@ -209,9 +210,7 @@ class io_manager(object):
         index = "({})".format(self._ctx.index) if self._ctx.index >= 0 else ""
         record = "{} {}{}:{}".format(time.strftime('%d/%m/%Y %H:%M:%S'), mtype, index, m)
         if not self._ctx.show_progress: print(record)
-        if self._log_to_file:
-            with open(os.path.join(self._out_dir, "log.txt"), "a") as f:
-                f.write(record+"\n");
+        with open(os.path.join(self._out_dir, "log.txt"), "a") as f:  f.write(record+"\n");
  
     def ensure_dir(self,d): 
         if not os.path.exists(d): os.makedirs(d)
@@ -239,5 +238,9 @@ class io_manager(object):
         self.log_message("saving file "+file_template)
         obj.to_csv(file_template)
         
+    
+    def try_make_video(self,mode='ffmpeg'):
+        #process:run ffmpeg
+        pass
     
     

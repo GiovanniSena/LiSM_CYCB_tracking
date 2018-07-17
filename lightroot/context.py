@@ -45,8 +45,11 @@ class context(dict):
     @property
     def index(self): return self._index
         
-    def folder_context(proc_dir):
-        return context({"proc_dir":proc_dir})
+    def folder_context(proc_dir, from_index=None, to_index=None):            
+        c =  context({"proc_dir":proc_dir})
+        if from_index is not None:c["First_good_index"] = from_index
+        if to_index is not None:c["Max_good_index"] = to_index
+        return c    
     
     def __dict_refresh__(self,*args, **kwargs):
         for k, v in dict(*args, **kwargs).items():  self[k] = v
@@ -95,7 +98,8 @@ class context(dict):
     def wrapped_iterator(self):
         self.setup()
         iomanager = tqdm(list(self._iom)) if self.show_progress else self._iom
-        for f in iomanager:
+        for i, f in iomanager:
+            self._index = i
             analysis.set_context_frame_statistics(f,self)
             #log them in a list but this is less important then the _stat dict merge
             self._frame_stats.append(self["last_frame_stats"])
@@ -136,7 +140,7 @@ class context(dict):
     
     def run(self,pipeline=None,capture_stats_callback=None):  
         """
-        main entry point - see inline comments
+        Main entry point - see inline comments
         Either runs the detault pipeline or a pipeline passed in by the user
         Uses internal objects such as file manager to iterate files
         A number of objects are saved in the cached data folder
@@ -164,7 +168,6 @@ class context(dict):
         #write extra files
         self._iom.save_file(self._tree.life_matrix, "life_matrix.csv")
         self._iom.save_file(tpctree.make_life_matrix(self._tree.data, restricted=True), "life_matrix_restricted.csv")
-        
         self._iom.save_file(pd.DataFrame([f for f in self._frame_stats]), "frame_statistics.csv")
         #cleanup
         self._iom.remove_check_points()
