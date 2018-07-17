@@ -25,5 +25,3 @@ def main(args=None):
 
 if __name__ == "__main__":  main()    
     
-#from lightrootx.context import context
-#c = context.folder_context("C:/Users/mrsir/Box Sync/CYCB-GFP/cut/April 4 (cut run 192)")#

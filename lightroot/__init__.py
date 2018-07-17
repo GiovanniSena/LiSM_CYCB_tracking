@@ -4,7 +4,7 @@ from skimage.restoration import  estimate_sigma
 import numpy as np
 import warnings
 warnings.filterwarnings('ignore')
-
+#
 class views(object):
     def __init__(self, df, options={}):
         self._df = df.copy()

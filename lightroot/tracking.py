@@ -6,8 +6,7 @@ import numpy as np
 from numba import jit
 from itertools import combinations
 from . import utils
-
-
+#
 class tpctree(object):
     """
     In online mode, pass blocks of coordinates for each time point and update the tracker

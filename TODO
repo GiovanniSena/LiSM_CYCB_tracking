@@ -3,6 +3,6 @@
 #in early frames, there are many creations and desctructions which are proibably just one or two cells for about 10 frames - a wider catchment might collect these together
 #installer
 #generate docs
-#could prob speed things up if we could refind the bounding box detection
+#could prob speed things up if we could refine the bounding box detection
 #better lag testing
-#possible ground through suggogate
+#possible ground through sur.

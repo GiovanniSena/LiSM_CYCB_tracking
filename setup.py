@@ -10,7 +10,7 @@ setup(
     author='Sirsh',
     author_email='amartey@gmail.com',
     license='MIT',
-    url='git@https://github.com/GiovanniSena',
+    url='git@https://github.com/GiovanniSena/LSFM_CYCB_analysis_v2',
     keywords='root microscopy tracking fuzzy registration',
     description='lighroot is an image processing pipeline for preprocessing lightsheet microscopy data and tracking transient fluorescent events in structured point clouds',
     long_description=('lighroot is an image processing pipeline for preprocessing lightsheet microscopy data and tracking transient fluorescent events in structured point clouds'),

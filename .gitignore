@@ -6,7 +6,6 @@
 *.zip
 *.rar
 *.tar
-cached_data
 cached_datax
 samples
 build
