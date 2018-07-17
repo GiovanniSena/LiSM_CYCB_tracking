@@ -19,9 +19,6 @@ def main(args=None):
         path = sys.argv[1]
         c = context.folder_context(path)
         c.run()
-    else:
-        print("Please specify a folder to process")
+    else:  print("Please specify a folder to process")
     
-
-if __name__ == "__main__":  main()    
-    
+if __name__ == "__main__":  main() 

@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 from matplotlib.pyplot import close
 import matplotlib.patches as patches
 import time
+from tqdm import tqdm
 
 # io - build in the missing file handler logics and the format determination
 class io_manager(object):
@@ -131,7 +132,7 @@ class io_manager(object):
         if norm: f = f / f.max()
         return f
     
-    def __file_indices_with_filled_gaps(self):
+    def __file_indices_with_filled_gaps__(self):
         """
         This is used by the class iterator which loads frames
         This helper method simply finds frame indices that are valid
@@ -152,8 +153,9 @@ class io_manager(object):
                 yield i
                 
     def __iter__(self):
-        for index in self.__file_indices_with_filled_gaps(): 
-            yield index, self._get_stack_(index)
+        gen = self.__file_indices_with_filled_gaps__()
+        gen = tqdm(list(gen)) if self._ctx.show_progress else gen
+        for index in gen:  yield index, self._get_stack_(index)
         
     def draw_bounding_box(self, ax, rect):
         inlay = 10

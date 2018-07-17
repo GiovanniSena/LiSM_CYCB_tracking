@@ -7,7 +7,6 @@ from .io import io_manager
 from .tracking import tpctree
 from . import analysis
 from .detection import *
-from tqdm import tqdm
 
 from matplotlib import pyplot as plt
 
@@ -97,8 +96,7 @@ class context(dict):
     @property
     def wrapped_iterator(self):
         self.setup()
-        iomanager = tqdm(list(self._iom)) if self.show_progress else self._iom
-        for i, f in iomanager:
+        for i, f in self._iom:
             self._index = i
             analysis.set_context_frame_statistics(f,self)
             #log them in a list but this is less important then the _stat dict merge
