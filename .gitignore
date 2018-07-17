@@ -6,12 +6,12 @@
 *.zip
 *.rar
 *.tar
+*.mp4
 cached_datax
 samples
 build
 dist
 logs
 data
-test
 
 

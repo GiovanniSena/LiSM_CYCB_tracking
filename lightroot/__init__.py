@@ -5,26 +5,26 @@ import numpy as np
 import warnings
 warnings.filterwarnings('ignore')
 #
-class views(object):
-    def __init__(self, df, options={}):
-        self._df = df.copy()
-        #apply scalings, renamings, 
-        #axis limits,
-        
-    @property
-    def view(self):
-        return self._df #modified
-    
-    @property
-    def name(self):
-        pass
-    
-def plot_views(title, views):
-    #add all the views to a grid - there may be 1 or more
-    #set all the styles that we want
-    #combine pandas plotting and styles with grid
-    pass
 
+#class views(object):
+#    def __init__(self, df, options={}):
+#        self._df = df.copy()
+#        #apply scalings, renamings, 
+#        #axis limits,
+#        
+#    @property
+#    def view(self):
+#        return self._df #modified
+#    
+##    @property
+ #   def name(self):
+ #       pass
+    
+#def plot_views(title, views):
+#    #add all the views to a grid - there may be 1 or more
+#    #set all the styles that we want
+#    #combine pandas plotting and styles with grid
+#    pass
 import matplotlib
 from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
@@ -38,6 +38,7 @@ class plots(object):
     def __init__(self,stats):
         self._stats = stats
        
+    @staticmethod
     def plot_quad(ims,pals=["gist_earth", "gist_earth", "gist_earth", "gist_earth"],callbacks={}):
         im = np.arange(100)
         im.shape = 10, 10
@@ -63,12 +64,13 @@ class plots(object):
 
         return fig
 
-    def frame_stats(file="./frame_stats.pdf"):
+    @staticmethod
+    def frame_stats(df, file="./frame_stats.pdf"):
         """
         This will be refactored into something more general - here we hard code just to keep track of the charts
         """
         
-        temp = self._stats
+        temp = df
         
         matplotlib.rcParams.update({'font.size': 12})
         fig, (ax1, ax2,ax3) = plt.subplots(3,  figsize=(10,8), sharex=True)
@@ -94,26 +96,7 @@ class plots(object):
 
         plt.xlim(0,100)
         plt.subplots_adjust(hspace=0.1)
-        fig.savefig(file,bbox_inches='tight')
-        
-    def example1():
-        test_data = pd.read_csv("./test_points.csv").drop("Unnamed: 0",1)
-        d1 = test_data[test_data.t==9].reset_index().drop("index",1)
-        d2 = test_data[test_data.t==10].reset_index().drop("index",1)
-        t = tpctree(d1)
-        t.update(test_data[test_data.t==10])
-        t.data.head()
-        p = {"c":"b", "canvasx": [400,800,800,400],"canvasy": [700,700,350,350] }
-        cn = list(tpctree.constellation_sampler(d1,N=6))
-        _call=utils.render_constellation_callback(cn)
-        c._iom.plot(None, blob_overlay=d1, props=p,callback=_call)
-        #
-        cn = list(tpctree.constellation_sampler(d2,N=50))
-        _call=utils.render_constellation_callback(cn)
-        c._iom.plot(None, blob_overlay=d2, props=p,callback=_call)
-        #
-        c._iom.plot(None, blob_overlay=d1,  props=p,callback=add_second(d2, pj=projected))
-    
+        fig.savefig(file,bbox_inches='tight')    
     #temp = df
     #temp["noise"] = temp["noise"] * 10
     #temp["top percentile"] = temp["perc"]
@@ -125,7 +108,7 @@ class plots(object):
     #ax.title.set_size(14)
 
 class analysis(object):
-
+    """static wrapper class for frame analysis functions"""
     @staticmethod
     def set_context_frame_statistics(im,ctx):
         ctx["last_frame_stats"] = {}
