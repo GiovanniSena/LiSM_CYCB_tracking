@@ -239,8 +239,20 @@ class io_manager(object):
         obj.to_csv(file_template)
         
     
-    def try_make_video(self,mode='ffmpeg'):
-        #process:run ffmpeg
-        pass
+    def try_make_video(self,mode='ffmpeg',frame_rate=5):
+        """
+        If ffmpeg installed make video. frame_rate above 1 is slower
+        """
+        try:
+            import subprocess
+            #todo maybe add frame rate and name formats to context check
+            #out_movie_frame_rate, out_frame_format
+            command = """ffmpeg -y -i Frame%04d.png -filter:v "setpts={}*PTS" -pix_fmt yuv420p movie.mp4""".format(frame_rate)
+            x=subprocess.Popen(command, shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,cwd=self._out_dir)
+            output,err=x.communicate()
+            if output:log("generated movie using ffmpeg")
+            else:pass
+        except:
+            pass
     
     

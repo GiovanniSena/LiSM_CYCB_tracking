@@ -169,6 +169,8 @@ class context(dict):
         self._iom.save_file(self._tree.life_matrix, "life_matrix.csv")
         self._iom.save_file(tpctree.make_life_matrix(self._tree.data, restricted=True), "life_matrix_restricted.csv")
         self._iom.save_file(pd.DataFrame([f for f in self._frame_stats]), "frame_statistics.csv")
+        #if ffmpeg can be globally called, this will generated an mp4 from the png files Frame*.png in the cached data folder
+        self._iom.try_make_video()
         #cleanup
         self._iom.remove_check_points()
         
