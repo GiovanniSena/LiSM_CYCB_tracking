@@ -91,8 +91,8 @@ class context(dict):
     
     @property
     def frame_warning(self):
-        if self._index == self._last_good_frame:return None
-        return "Raw Frame Missing Here! Using last good one: {}".format(self._last_good_frame)
+        if self._index not in self["Frame_gaps"]:return None
+        return "Raw Frame Missing Here! Using last good one: {}".format(self["Frame_gaps"][self._index])
     
     @property
     def wrapped_iterator(self):
