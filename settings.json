@@ -1,4 +1,5 @@
 {
     "epsilon": 20,
+    "max_allowed_objects" : 100,
     "show_progress": true
 }

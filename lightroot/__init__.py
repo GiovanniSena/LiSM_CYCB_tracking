@@ -4,34 +4,47 @@ from skimage.restoration import  estimate_sigma
 import numpy as np
 import warnings
 warnings.filterwarnings('ignore')
-#
 
-#class views(object):
-#    def __init__(self, df, options={}):
-#        self._df = df.copy()
-#        #apply scalings, renamings, 
-#        #axis limits,
-#        
-#    @property
-#    def view(self):
-#        return self._df #modified
-#    
-##    @property
- #   def name(self):
- #       pass
+def check_file_list(any_format,ignore_warnings=True, warnings=[]):
+    """
+    get the folder for the job or a batch job
+    a batch job can be either a readable text file name: file_name.any_extension - contents must be file with list of folders, one per line
+    or it can be a glob-like search pattern for folders//*
+    the folders may or may not contain valid tif data with well-named frames
+    if any are invalid, the invalid ones are added to warnings. the valid ones are returned in a list
+    a caller can decide what to do about the warnings which will be listed (ignore/quit)
+    If print_info==True:
+    the following folders can be processed:
+    folder range #gaps 
+    the following cannot be processed:
+    folder issue
+    """
+    import os
+    from glob import glob
+    folders = [any_format]
+    if os.is_file(any_format):
+        with open(any_format) as f: folders = [_f for _f in f]
+    if any_format[-1]=="*":  folders = list(glob(any_format))
+    valid_folders = []
+    for f in folders:
+        c = context.folder_context(f)
+        if not c.meta_key["valid"]: warnings.append(f)
+        else: valid_folders.append(c.meta_key)
+          
+    #list the goods and the bads by simply listing the info for the folder but then say warnings in tabs if req
     
-#def plot_views(title, views):
-#    #add all the views to a grid - there may be 1 or more
-#    #set all the styles that we want
-#    #combine pandas plotting and styles with grid
-#    pass
+    if ignore_warnings == False and len(warnings) > 0:
+        #some folders cannot be processed. Do you want to continue(y) or quit(n)?
+        pass
+            
+    return valid_folders
+    
 import matplotlib
 from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 import numpy as np
 import matplotlib.patches as patches
-
 class plots(object):
 
 

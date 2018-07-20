@@ -1,11 +1,13 @@
 from skimage.restoration import denoise_wavelet
 from skimage.measure import regionprops,compare_psnr,shannon_entropy,simple_metrics
-from scipy.ndimage import label
-from scipy.ndimage import gaussian_filter
-import numpy as np
+from scipy.ndimage import label,gaussian_filter,maximum_filter,gaussian_gradient_magnitude
 from scipy.ndimage import distance_transform_edt
+from skimage.feature import peak_local_max
+import numpy as np
+import pandas as pd
 from . import pipe_object, analysis
-#
+
+
 class preprocessing(object):  
     @staticmethod
     @pipe_object
@@ -89,10 +91,31 @@ class preprocessing(object):
                 mask[mask<mask_threshold] = 0
                 mask[mask>0] = 1
                 return g2 
-        ctx.log("Unable to find adaptive threshold for frame", mtype="WARN") 
+        perc99 = ctx["last_frame_stats"]["percentiles_509599"][-1]
+        ctx.log("Unable to find adaptive threshold for frame aggressively removing 99th percentile", mtype="WARN") 
+        im[im<perc99] = 0
+        return im
+
+    @staticmethod
+    @pipe_object
+    def gradient_filter(im,ctx,props={}):
+        im = gaussian_gradient_magnitude(im, sigma=1)
+        im /= im.max()
         return im
     
-    
+    @staticmethod
+    @pipe_object
+    def pinpoint(im,ctx,props={},size=15):
+        """
+        label the local peaks in the image - this is a presegmentation
+        """
+        im = im.astype(float)
+        im/=im.max()
+        im = preprocessing.__dog__(im)#call internal one
+        mim = maximum_filter(im, size=size, mode='constant')
+        local_maxi =peak_local_max(mim, indices=False, min_distance=5)
+        return label(local_maxi)[0]
+        
     @staticmethod
     @pipe_object
     def select_filtered_by_2d_lowband_largest_component(im,ctx,props={}):
@@ -156,32 +179,18 @@ class preprocessing(object):
 #]
 
 #decorator_general: normlalize, log before and after
-from skimage.measure import regionprops
-from scipy.ndimage import maximum_filter,gaussian_filter,label
-from skimage.feature import peak_local_max
-import pandas as pd
+
 class xlabel(object):
     """
     A single object which maky contain multiple sub objects
     a "pre-segmentation" strategy is used to find the keypoints or blob centroids in the image
     """
-    def __init__(self,region):
+    def __init__(self,region,ctx):
         self.region = region
         self.region2d = region if len(region.image.shape)==2 else xlabel._label_2d_(region.image.sum(0))
         self._num_keypoints = 1 #default
-        self._kp = self.__build_key_points__()
-        
-    def pinpoint(im):
-        """
-        label the local peaks in the image - this is a presegmentation
-        """
-        im = im.astype(float)
-        im/=im.max()
-        im = preprocessing.__dog__(im)#call internal one
-        mim = maximum_filter(im, size=15, mode='constant')
-        local_maxi =peak_local_max(mim, indices=False, min_distance=5)
-        return label(local_maxi)[0]
-    
+        self._kp = self.__build_key_points__(ctx)
+            
     @property
     def radius(self): return xlabel.__radius_from_bbox__(self.region.bbox)
     
@@ -231,10 +240,10 @@ class xlabel(object):
             return regionprops(label(im)[0])[0]
         except:
             return None
-        
-    def __build_key_points__(self):
+                
+    def __build_key_points__(self,ctx):
         """Using a max filter or otherwise"""   
-        kps = xlabel.pinpoint(self.region.image)#empty context passed
+        kps = preprocessing.pinpoint(self.region.image,ctx=ctx)#empty context passed
         kps = regionprops(kps)
         if len(kps)>0:
             self._num_keypoints = len(kps)
@@ -253,16 +262,19 @@ class xregion(object):
     The XLabels are returned but these can contain one or more blob-like objects
     We can then decide how to subdiv these
     """
-    def __init__(self,im,of_keypoints=True):           
-        im_ = im if of_keypoints == False else self.prep_keypoints(im)
+    def __init__(self,im,ctx,of_keypoints=True):           
+        #we can either globally pinpoint or recursively pinpoint
+        self._ctx = ctx
+        im_ = im if of_keypoints == False else preprocessing.pinpoint(im,ctx)
         self._labels = self.__build_xlabels__(im_) 
         
-    def update_context(self, ctx):
+        
+    def update_context(self):
         #lst = [p.coords for p in  self.xlabels]
-        ctx.add_blobs(pd.DataFrame(list(self),columns=["z","y", "x","r"]))
+        self._ctx.add_blobs(pd.DataFrame(list(self),columns=["z","y", "x","r"]))
         
     def __build_xlabels__(self,im): 
-        l = [xlabel(r) for r in regionprops(label(im)[0])]
+        l = [xlabel(r,self._ctx) for r in regionprops(label(im)[0])]
         l = [_l for _l in l if _l.prop_is_above("area", 100)]
         return l
     
@@ -281,18 +293,11 @@ class xregion(object):
     def __repr__(self):
         return str(len(self._labels))+" regions"
 
-    @staticmethod
-    def prep_keypoints(im, ctx=None, props={}):
-        #update the ctx blobs using the keypoint detection 
-        g2 = im / im.max()
-        g2[g2<0.1] = 0
-        #we dont care about bright things, we care about seperated round things
-        distance =  distance_transform_edt(g2) 
-        #always mooth the distance
-        distance =  gaussian_filter(distance, sigma=1)
-        #now int two steps, pick out smoothed peaks
-        distance =  maximum_filter(distance, size=15, mode='constant')
-        #this returns some blotches which can be turned into markers
-        local_maxi =  peak_local_max(  distance, indices=False, min_distance=5)
-        #return the labels from the peaks as these are the blotches we care about
-        return label(local_maxi)[0]
+###OTHER FUNCTIONS############
+def blob_centroids_from_labels(im,ctx,props={}):
+    kps = regionprops(im)
+    centroids = [xlabel.__coords_from_bbox__(r.bbox,None)  for r in kps]
+    
+    return pd.DataFrame(centroids,columns=["z","y", "x","r"])
+    
+#

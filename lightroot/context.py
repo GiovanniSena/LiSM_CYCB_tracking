@@ -28,10 +28,20 @@ class context(dict):
         """
         Add the bounding box offset to the incoming blobs - this needs some more thought
         """
-        df["x"] = df["x"] + self.bbox[1]
-        df["y"] = df["y"] + self.bbox[0]
+        offsetx = self.bbox[1] if self.bbox is not None else 0
+        offsety = self.bbox[0] if self.bbox is not None else 0
+        df["x"] = df["x"] + offsetx
+        df["y"] = df["y"] + offsety
         self._blobs = df
     
+    @property
+    def meta_key(self): return {}
+    
+    def update_meta_key(self, d):
+        self._meta_key.update(d)
+        f = None
+        #self._iom._write_file_(f, "META")
+        
     @property
     def show_progress(self):   return False if "show_progress" not in self else self["show_progress"]
         
@@ -109,10 +119,15 @@ class context(dict):
         #the bounding box is recorded on the context for latter offset
         g = preprocessing.select_filtered_by_2d_lowband_largest_component(f,c)
         h = preprocessing.point_cloud_emphasis(g,c,props={"to_dst":False})
-        h = preprocessing.dog(h,c,props={"threshold":0.2})
+        #h = preprocessing.dog(h,c,props={"threshold":0.2})
+        #h = preprocessing.gradient_filter(h,c)
+        
         #find and update the centroids in the context -they will be offset in the context
         #in some cases we just take key points if we do not trust dogs. Param=False
-        xregion(h,False).update_context(c)
+        #xregion(h,self, False).update_context()
+        h = preprocessing.pinpoint(h,c)
+        centroids = blob_centroids_from_labels(h,c)
+        c.add_blobs(centroids)
         if show: c._iom.plot(f,c.blobs, bbox=c.bbox) #show the results 
         return f#we jump back to original frame context here
     
@@ -145,6 +160,8 @@ class context(dict):
         """
         pipeline = context.make_pipeline(pipeline,capture_stats_callback)
 
+        #update meta key starting
+        
         for stack in self.wrapped_iterator:
             #process stack with top level pipeline
             stack = pipeline(stack,self)
@@ -172,4 +189,5 @@ class context(dict):
         #cleanup
         self._iom.remove_check_points()
         
+        #update meta key done
         print("Done!")

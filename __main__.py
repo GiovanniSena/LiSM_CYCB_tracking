@@ -17,6 +17,7 @@ def main(args=None):
     print(ascii_art)
     if l >1:  
         path = sys.argv[1]
+        #for path in lightroot.check_file_list(path):
         c = context.folder_context(path)
         c.run()
     else:  print("Please specify a folder to process")
