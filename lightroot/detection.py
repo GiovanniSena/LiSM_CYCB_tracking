@@ -19,7 +19,13 @@ class preprocessing(object):
         if ctx.is_frame_degenerate:return im
             
         if trange != None:
-            if noise > trange[1]:#excessive
+            if noise > 0.085:
+                ctx.log("estimated noise standard deviation of {:.4f} exceeds 0.085. Thresholding aggressively and skipping denoise (EXPERIMENTAL)".format(noise, trange[1],perc))
+                im/=im.max()
+                im[im<0.7] = 0
+                im/=im.max()
+                return im
+            elif noise > trange[1]:#excessive
                 ctx.log("estimated noise standard deviation of {:.4f} exceeds [*,{}]. Thresholding @ 99 percentile {} before denoise...".format(noise, trange[1],perc))
                 im[im<perc] = 0
                 im/=im.max()
@@ -76,23 +82,28 @@ class preprocessing(object):
         mask_threshold, tmax, waiting =0.1, 0.3, False
         perim_range=[1000,2000]
         
-        for t in np.arange(0.01,tmax, 0.01):
-            g2 = im.copy()
-            g2 /= g2.max()
-            g2[g2<t]=0
-            props = np.array(list(label_distribution(g2)))
-            m = props.max()
-            if m > perim_range[1] and not waiting: waiting=True
-            if waiting and m < perim_range[0]: 
-                ctx.log_stats({"anealThresh":t})
-                ctx.log("setting the clipped region adaptive threshold to {0:.2f} based on maximum label perimeters".format(t))
-                g2 /=g2.max()
-                mask = g2.copy()
-                mask[mask<mask_threshold] = 0
-                mask[mask>0] = 1
-                return g2 
+        try:
+            for t in np.arange(0.01,tmax, 0.01):
+                g2 = im.copy()
+                g2 /= g2.max()
+                g2[g2<t]=0
+                props = np.array(list(label_distribution(g2)))
+                if len(props)==0: 
+                    ctx.log("Image appears to contain little or no data - breaking out of annealing threshold", mtype="WARN") 
+                    return im
+                m = props.max()
+                if m > perim_range[1] and not waiting: waiting=True
+                if waiting and m < perim_range[0]: 
+                    ctx.log_stats({"anealThresh":t})
+                    ctx.log("setting the clipped region adaptive threshold to {0:.2f} based on maximum label perimeters".format(t))
+                    g2 /=g2.max()
+                    mask = g2.copy()
+                    mask[mask<mask_threshold] = 0
+                    mask[mask>0] = 1
+                    return g2 
+        except: pass # next in workflow is fine
         perc99 = ctx["last_frame_stats"]["percentiles_509599"][-1]
-        ctx.log("Unable to find adaptive threshold for frame aggressively removing 99th percentile", mtype="WARN") 
+        ctx.log("Unable to find adaptive threshold for frame - aggressively removing 99th percentile", mtype="WARN") 
         im[im<perc99] = 0
         return im
 
@@ -108,7 +119,7 @@ class preprocessing(object):
     def pinpoint(im,ctx,props={},size=15):
         """
         label the local peaks in the image - this is a presegmentation
-        """
+        """        
         im = im.astype(float)
         im/=im.max()
         im = preprocessing.__dog__(im)#call internal one
@@ -162,11 +173,26 @@ class preprocessing(object):
         else:# im assuming data is always 3d but i could put in more cases
             y1,x1, y2,x2 = region.bbox[0],region.bbox[1],region.bbox[2],region.bbox[3]
             return output[:, y1:y2,x1:x2]
-        
+    
+    @staticmethod
+    def remove_small_objects(im,ctx,props={}):
+        """TODO"""
+        max_label = 0
+        l = label(im.sum(0))[0]
+        for r in regionprops(l):
+            if r.perimeter > max_label:max_label = r.perimeter
+        if max_label < 100:
+            ctx.log("detected bad image - marking degenerate",mtype="WARN")
+            ctx["last_frame_stats"]["is_degenerate"] = True
+            im[im>0] = 0
+        return im
+
     @staticmethod
     def point_cloud_emphasis(im,ctx, props={}):
          #threshold 
         im = preprocessing.annealing_thresholding(im,ctx)
+        #small objects cause lots of problems downstream but only occur in degenerate frames based on upstream
+        im = preprocessing.remove_small_objects(im,ctx)
         #return distance threshold of 
         to_dst = False if "to_dst" not in props else props["to_dst"]
         return preprocessing.as_dst_transform(im,ctx) if to_dst else im

@@ -161,6 +161,16 @@ class io_manager(object):
         inlay = 10
         ax.add_patch( patches.Rectangle(  list(reversed(rect[0:2])),   rect[3]-rect[1]-inlay,   rect[2]-rect[0]-inlay,  fill=False, edgecolor='white' ))
     
+    def try_plot_transform(self, ax):
+        try:
+            if self._ctx._tree != None and self._ctx._tree._last_transform != None:
+                x,y=50,50
+                tr = np.array(self._ctx._tree._last_transform([np.array([x,y,0])]))[0]
+                arrow = patches.Arrow(x,y,tr[0],tr[1],width=1, color='r')
+                ax.add_patch(arrow)
+        except Exception as ex:
+            print(repr(ex))
+    
     def plot(self, im, blob_overlay=None, annotations=None, bbox=None, ax=None, callback=None, props={},):
         """
         plotting with overlays - some examples follow assuming df has columns "x", "y", "z" and possible "key" for annotatations
@@ -173,6 +183,7 @@ class io_manager(object):
         if ax is None: 
             fig,ax = plt.subplots(1,figsize=(20,10))
             if im is not None: 
+                #projection type could be sum|max|mean - im not sure which is most useful
                 plottable = im.sum(0) if len(im.shape) == 3 else im
                 if bbox is not None:self.draw_bounding_box(ax, bbox)
                 if "palette" in props:ax.imshow(plottable,props["palette"])
@@ -184,6 +195,8 @@ class io_manager(object):
                 ax.minorticks_on()
                 ax.grid(which='major', linestyle='-', linewidth='0.5', color='grey')
                 ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
+                
+            self.try_plot_transform(ax)
 
         #plot the blob overlay
         if blob_overlay is not None:
@@ -200,7 +213,7 @@ class io_manager(object):
         #add frame warning if its in the options
         if "frame_warning" in props and props["frame_warning"] is not None:
             ax.text(30, 30, props["frame_warning"], color='red', fontsize=15)
-                
+        
         if callback != None: callback(ax)
     
         return ax

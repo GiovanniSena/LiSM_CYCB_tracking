@@ -23,16 +23,23 @@ class context(dict):
         self._frame_stats = []
         self._blobs = None
         self.bbox = None
+        self.setup()
         
-    def add_blobs(self,df):
+    def add_blobs(self,df,skip_if_excessive=False):
         """
         Add the bounding box offset to the incoming blobs - this needs some more thought
         """
-        offsetx = self.bbox[1] if self.bbox is not None else 0
-        offsety = self.bbox[0] if self.bbox is not None else 0
-        df["x"] = df["x"] + offsetx
-        df["y"] = df["y"] + offsety
-        self._blobs = df
+        if skip_if_excessive and "max_allowed_objects" in self and len(df) > self["max_allowed_objects"]:
+            self.log("skipping saving of centroids because there are more than the configured 'max_allowed_objects' value")
+            return
+        #if there are no blobs, simply add empty data frame of structure
+        if df is None: self._blobs = pd.DataFrame(columns=["x","y", "x", "r"])
+        else:
+            offsetx = self.bbox[1] if self.bbox is not None else 0
+            offsety = self.bbox[0] if self.bbox is not None else 0
+            df["x"] = df["x"] + offsetx
+            df["y"] = df["y"] + offsety
+            self._blobs = df
     
     @property
     def meta_key(self): return {}
@@ -86,7 +93,6 @@ class context(dict):
                 self.log("unable to parse the ./settings.json file:"+repr(ex), "ERROR")
             
     def load_frame(self, i):
-        self.setup()
         f =  self._iom._get_stack_(i)
         analysis.set_context_frame_statistics(f,self)
         return f
@@ -105,7 +111,7 @@ class context(dict):
     
     @property
     def wrapped_iterator(self):
-        self.setup()
+        #self.setup()
         for i, f in self._iom:
             self._index = i
             analysis.set_context_frame_statistics(f,self)
@@ -115,21 +121,22 @@ class context(dict):
     
     def detect(f,c,show=False):
         f = preprocessing.denoise(f,c)
-        if c.is_frame_degenerate:return f#breaking condition
+        if c.is_frame_degenerate:
+            c.add_blobs(None)#this could be optional i.e. we could optoinally keep the last blobs - mostly in our data if degenerate there is nothing going on
+            return f#breaking condition
         #the bounding box is recorded on the context for latter offset
         g = preprocessing.select_filtered_by_2d_lowband_largest_component(f,c)
         h = preprocessing.point_cloud_emphasis(g,c,props={"to_dst":False})
         #h = preprocessing.dog(h,c,props={"threshold":0.2})
         #h = preprocessing.gradient_filter(h,c)
-        
         #find and update the centroids in the context -they will be offset in the context
         #in some cases we just take key points if we do not trust dogs. Param=False
         #xregion(h,self, False).update_context()
         h = preprocessing.pinpoint(h,c)
         centroids = blob_centroids_from_labels(h,c)
-        c.add_blobs(centroids)
+        c.add_blobs(centroids,True)
         if show: c._iom.plot(f,c.blobs, bbox=c.bbox) #show the results 
-        return f#we jump back to original frame context here
+        return f #if not c.is_frame_degenerate else f_in
     
     def make_pipeline(pipes=None,capture_stats_callback=None):
         if pipes == None: pipes = [context.detect]#default pipeline
@@ -164,7 +171,7 @@ class context(dict):
         
         for stack in self.wrapped_iterator:
             #process stack with top level pipeline
-            stack = pipeline(stack,self)
+            stack = pipeline(stack,self) #if degenerate may be an idea to always use a projection of the raw for overlays for accountability
             #compute pairing using the tracker - the tracker knows the context blobs so no arg
             blob_annotations = self._update_tree_()
             #plot previous blobs when they exist using a red blobs
