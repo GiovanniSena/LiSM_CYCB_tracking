@@ -61,6 +61,13 @@ class context(dict):
     @property
     def index(self): return self._index
         
+    
+    def point_data_context(filename=None):
+        """sets up context to process an existing point cloud time series
+           by default will use the data points saved in cache but any file can be passed in once it has the t,x,y,z column format
+        """
+        c =  context({"proc_dir":None})
+        
     def folder_context(proc_dir, from_index=None, to_index=None):            
         c =  context({"proc_dir":proc_dir})
         if from_index is not None:c["First_good_index"] = from_index
@@ -157,6 +164,14 @@ class context(dict):
         else: self._tree.update(self._blobs)
         #self.update_stats(self._tree.stats) # merge statistics from the tree
         return self._tree.blobs
+    
+    def _tree_only_run_(self):
+        #load data point file
+        #create an iterator of the data frame
+        #do the progress etc update index and blobs
+        #update the tree 
+        #save the data to the tree.last_run - overwrite
+        pass
     
     def run(self,pipeline=None,capture_stats_callback=None):  
         """

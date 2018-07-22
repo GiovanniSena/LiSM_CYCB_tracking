@@ -50,7 +50,16 @@ class plots(object):
 
     def __init__(self,stats):
         self._stats = stats
-       
+    
+    @staticmethod
+    def plot_ref_vector( theta,radius=50, offset = [0,0], ax=None):
+        if ax is None:  ax = plt.gca()
+        theta = np.radians(theta)
+        xy = np.array([radius*np.cos(theta) + offset[0],   radius*np.sin(theta) + offset[1]]).round(2)  
+        ax.plot([offset[0], xy[0]],[offset[1], xy[1]], 'r--', lw=1) 
+        ax.plot(*xy, 'ro')
+        return xy
+
     @staticmethod
     def plot_quad(ims,pals=["gist_earth", "gist_earth", "gist_earth", "gist_earth"],callbacks={}):
         im = np.arange(100)

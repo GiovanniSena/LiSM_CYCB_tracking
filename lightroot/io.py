@@ -164,12 +164,15 @@ class io_manager(object):
     def try_plot_transform(self, ax):
         try:
             if self._ctx._tree != None and self._ctx._tree._last_transform != None:
-                x,y=50,50
-                tr = np.array(self._ctx._tree._last_transform([np.array([x,y,0])]))[0]
-                arrow = patches.Arrow(x,y,tr[0],tr[1],width=1, color='r')
-                ax.add_patch(arrow)
+                offset = [70,70]
+                radius = 50
+                tr = self._ctx._tree._last_transform
+                theta = np.radians(tr.ref_angle)
+                xy = np.array([radius*np.cos(theta) + offset[0],   radius*np.sin(theta) + offset[1]]).round(2)  
+                ax.plot([offset[0], xy[0]],[offset[1], xy[1]], 'r--', lw=1) 
+                ax.plot(*xy, 'w*')
         except Exception as ex:
-            print(repr(ex))
+            print(repr(ex), "when plotting tr")
     
     def plot(self, im, blob_overlay=None, annotations=None, bbox=None, ax=None, callback=None, props={},):
         """
