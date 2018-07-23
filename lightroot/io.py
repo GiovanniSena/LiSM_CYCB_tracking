@@ -167,10 +167,14 @@ class io_manager(object):
                 offset = [70,70]
                 radius = 50
                 tr = self._ctx._tree._last_transform
-                theta = np.radians(tr.ref_angle)
-                xy = np.array([radius*np.cos(theta) + offset[0],   radius*np.sin(theta) + offset[1]]).round(2)  
-                ax.plot([offset[0], xy[0]],[offset[1], xy[1]], 'r--', lw=1) 
-                ax.plot(*xy, 'w*')
+                if tr.ref_angle is not None:
+                    disp = tr.ref_vector
+                    #based on y axis sign, we rotate clock or anti-clock
+                    #i flip this because our sign is based on y-axis and we are inverted on the image
+                    theta = np.radians(-1*tr.ref_angle)
+                    xy = np.array([radius*np.cos(theta) + offset[0],   radius*np.sin(theta) + offset[1]]).round(2)  
+                    ax.plot([offset[0], xy[0]],[offset[1], xy[1]], 'r--', lw=1) 
+                ax.plot(*offset, 'w*')#the origin is where the current blob should be - when idenity, we have no angle so we just plot this
         except Exception as ex:
             print(repr(ex), "when plotting tr")
     

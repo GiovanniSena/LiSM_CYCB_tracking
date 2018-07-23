@@ -2,6 +2,7 @@ from functools import wraps
 from scipy.ndimage import gaussian_filter
 from skimage.restoration import  estimate_sigma
 import numpy as np
+import pandas as pd
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -45,12 +46,83 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 import numpy as np
 import matplotlib.patches as patches
+import matplotlib.lines as mlines
+import math
+
 class plots(object):
-
-
     def __init__(self,stats):
         self._stats = stats
     
+    @staticmethod
+    def plot_disp_angles(first_angle, angles, labels,ax=None):
+        def arc_patch(center, radius, angle=90, ax=None, resolution=50, **kwargs):
+            theta1, theta2 = angle -90, angle+90
+            # make sure ax is not empty
+            if ax is None:  ax = plt.gca()
+            # generate the points
+            theta = np.linspace(np.radians(theta1), np.radians(theta2), resolution)
+            points = np.vstack((radius*np.cos(theta) + center[0], 
+                                radius*np.sin(theta) + center[1]))
+            poly = patches.Polygon(points.T, closed=False, alpha=0.1, **kwargs)
+            ax.add_patch(poly)
+            ax.set_aspect('equal')
+            return ax
+
+        def rotate(xy, degrees):
+            #i think this is inverted on the y-axis?
+            radians = np.radians(-degrees)
+            x, y = xy
+            xx = x * math.cos(radians) + y * math.sin(radians)
+            yy = -x * math.sin(radians) + y * math.cos(radians)
+            return xx, yy
+
+        def plot_angle_arrow(ang,ax):
+            newpoint = rotate((2,0),ang)
+            arrow = patches.Arrow(0,0,newpoint[0], newpoint[1],  width=0.2)
+            ax.add_patch(arrow)
+            plt.legend([arrow], ['Global Transform'])
+
+        def plot_angle_vector(ang,ax,c='k',annotation='x'):
+            newpoint = rotate((2,0),ang)
+            newpoint_disp = rotate((2.01,0),ang)
+            #rotation=ang, 
+            ax.text(*newpoint_disp, annotation, fontsize=16, rotation_mode='anchor')
+            v = ax.plot([0,newpoint[0]],[0, newpoint[1]], c+'--', lw=1)
+
+        if ax == None:
+            fig, ax = plt.subplots(1,1,figsize=(10,10))
+
+        arc_patch((0.,0.), 2, first_angle, ax=ax, fill=True, color='blue')
+        arc_patch((0.,0.), 1, first_angle+180, ax=ax, fill=True, color='blue')
+        plot_angle_arrow(first_angle,ax)
+        for idx, a in enumerate(angles):
+            col = "k" if not np.abs(a - first_angle) > 90 else "r"
+            plot_angle_vector(a,ax,c=col,annotation=labels[idx])
+        ax.set_xlim(-3,3)
+        ax.set_ylim(-3,3)
+        ax.set_yticklabels([])
+        ax.set_xticklabels([])
+
+
+    @staticmethod
+    def add_projection_from_points(tr, point_data, epsilon=25, ax=None):
+        columns = ["x","y","z"]
+        area = 2*math.pi*epsilon
+        points = point_data[columns].as_matrix()
+        if ax is None:  ax = plt.gca()
+        projected = pd.DataFrame(tr(points),columns=columns)
+        for k, row in projected.iterrows():  ax.plot([points[k][0],row["x"]],[points[k][1],  row["y"]], 'b--', lw=1)   
+        ax.scatter(x=projected.x, y=projected.y, facecolors='none', edgecolors='b', s=area, label='projected')  
+        
+    @staticmethod
+    def plot_proposal(t1,t2,tr,ax=None):
+        if ax is None:  ax = plt.gca()
+        plots.add_projection_from_points(tr, t2, ax=ax)
+        ax.scatter(x=t2.x, y=t2.y, s=30, c='b')
+        ax.scatter(x=t1.x, y=t1.y, s=20, c='g')
+        #for k,r in t1.iterrows(): ax.annotate(str(k), (r["x"],r["y"]+15),  ha='center', va='top', color='g', size=14)
+        for k,r in t2.iterrows(): ax.annotate(str(k), (r["x"],r["y"]+10),  ha='center', va='top', color='b', size=14)
+
     @staticmethod
     def plot_ref_vector( theta,radius=50, offset = [0,0], ax=None):
         if ax is None:  ax = plt.gca()

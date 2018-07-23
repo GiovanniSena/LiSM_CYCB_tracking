@@ -11,7 +11,7 @@ from . import pipe_object, analysis
 class preprocessing(object):  
     @staticmethod
     @pipe_object
-    def denoise(im, ctx, props={}):
+    def denoise(im, ctx,props={}):
         trange = ctx["noise_trange"]
         perc = ctx["last_frame_stats"]["percentiles_509599"][-1]
         pseudo_ent = ctx["last_frame_stats"]["pseudo_ent"]   
@@ -20,10 +20,13 @@ class preprocessing(object):
             
         if trange != None:
             if noise > 0.085:
-                ctx.log("estimated noise standard deviation of {:.4f} exceeds 0.085. Thresholding aggressively and skipping denoise (EXPERIMENTAL)".format(noise, trange[1],perc))
+                ctx.log("estimated noise standard deviation of {:.4f} exceeds 0.085. Thresholding aggressively, smoothing and skipping denoise!".format(noise, trange[1],perc))
                 im/=im.max()
-                im[im<0.7] = 0
+                im[im<0.5] = 0
                 im/=im.max()
+                #smooth a little - these are usually very messy data with a few bright spots here and there
+                #I have thinned out and smoothed as a weak attempt to detect signals that can be picked up by pinpoint
+                im = preprocessing.smoothing(im,ctx,props={"sigma":1})
                 return im
             elif noise > trange[1]:#excessive
                 ctx.log("estimated noise standard deviation of {:.4f} exceeds [*,{}]. Thresholding @ 99 percentile {} before denoise...".format(noise, trange[1],perc))

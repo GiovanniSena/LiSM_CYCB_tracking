@@ -15,10 +15,11 @@ ascii_art = """
 def main(args=None):
     l= len(sys.argv)
     print(ascii_art)
+    maxindex= int(sys.argv[2]) if l > 2 else None
     if l >1:  
         path = sys.argv[1]
         #for path in lightroot.check_file_list(path):
-        c = context.folder_context(path)
+        c = context.folder_context(path,to_index=maxindex)
         c.run()
     else:  print("Please specify a folder to process")
     

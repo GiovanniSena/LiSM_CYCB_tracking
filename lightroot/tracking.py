@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from numba import jit
 from itertools import combinations,product
-from . import utils
+from . import utils,plots
 from tqdm import tqdm
 #
 DEFAULT_EPSILON = 18
@@ -30,44 +30,51 @@ class tpctree(object):
         self._t = 0 
         self.data = None
         self._t_offset= 0
-        self.merge_data(data)
-       
-        self._last_transform = None
+        self._stats = {}
+        self._transform_collection = []
         self._detect_ratio = []
-        #could take any of these from options
-        #10 seems to small and 20 could be too big - double counting and also an opposite direction in subtle movements on boundary to admit debris
-        #need to do some fnal checks over extended frames to be sure
+        
         self._epsilon = DEFAULT_EPSILON if "epsilon" not in options else options["epsilon"]
-        self._alt_lags_enabled = False if "lags" not in options else options["lags"]
+        self._lags = [1] if "lags" not in options else options["lags"]
         self._transforms_enabled = False if "transforms" not in options else options["transforms"]
         self._use_tr_concensus = True if "use_tr_concensus" not in options else options["use_tr_concensus"]
         self._angle_tresh = 90 if "angle_tresh" not in options else options["angle_tresh"]
+        self._use_data_t = True if "use_data_t" not in options else options["use_data_t"]
         
+        self.merge_data(data)
+       
+        self._last_transform = None        
         self._columns = ["x","y","z"]
         #add a small translation to the priors - this is effectively a void transform
-        self._transform_priors = [tpctree.translation_transform_for(0.01*np.ones((1,len(self._columns))))]
+        self._transform_priors = []
         self._transformer = tpctree.__default_transformer__
         #self._sampler = tpctree.constellation_sampler#simple_sampler
         self._sampler = tpctree.simple_sampler
-        self._stats = {}
-        self._transform_collection = []
-      
+        
     def process_file(file_name, start=0,end=-1, options={"epsilon":15, "transforms":True}):
         data = pd.read_csv(file_name).reset_index()[["t","x","y","z"]]
         tree=None
         maxt = data.t.max()+1 if end==-1 else end
         for g,d in tqdm(data[(data.t>=start)&(data.t<=end)].groupby("t")):
-            if tree == None: tree = tpctree(d[["x", "y", "z"]],options)
-            else: tree.update(d[["x", "y", "z"]]) 
+            if tree == None: tree = tpctree(d[["x", "y", "z", "t"]],options)
+            else: tree.update(d[["x", "y", "z", "t"]]) 
             tree.data.to_csv(file_name+".updated")
         return tree
         
+    def __handle_data_tvals__(self, data):
+        if self._use_data_t:
+            pass
+            #t_in = data.iloc[0]["t"]
+            #self.merge_statistic("data_t_index", t_in)
+                
     def merge_data(self, data):
         if data is not None:
+            self.__handle_data_tvals__(data)
             if self.data is None or len(self.data)==0:#first time case
                 data.index.name = "key"
                 self.data = data.reset_index()
-                self.data["t"] = self._t#we do not trust any t passed in but we should not really overwrite it - think about this
+                
+                self.data["t"] = self._t
                 self.data["angles"] = None
             else:
                 data.loc[:,'t']  = self._t
@@ -166,11 +173,10 @@ class tpctree(object):
         pad = lambda x: np.hstack([x, np.ones((x.shape[0], 1))])
         unpad = lambda x: x[:,:-1]
         A, res, rank, s = np.linalg.lstsq(pad(X), pad(Y),rcond=None)
-        transform = lambda x: unpad(np.dot(pad(x), A))
-        transform.__ttype__ = "transform"
-        transform.ref_vector = tpctree._tr_ref_displacement_(transform)
-        transform.ref_angle = tpctree._tr_ref_angle_(transform)
-        
+        tr = lambda x: unpad(np.dot(pad(x), A))
+        tr.__ttype__ = "transform"
+        tr.ref_vector,tr.ref_angle = tpctree._tr_refs_(tr)
+
         return transform
     
     def find_translation(X,Y): 
@@ -182,14 +188,24 @@ class tpctree(object):
         mean_vec = np.stack([mean_vec.mean(axis=0)])
         tr= tpctree.translation_transform_for(mean_vec)
         tr.__ttype__ = "translation"
-        tr.ref_vector = tpctree._tr_ref_displacement_(tr)
-        tr.ref_angle = tpctree._tr_ref_angle_(tr)
+        tr.ref_vector,tr.ref_angle = tpctree._tr_refs_(tr)
         
         return tr
     
     def tr_type(tr):
         try:  return tr.__type__
         except:  return "general"
+    
+    def identity_transform(s=3):
+        def _identity_(m):
+            m = np.matrix(np.hstack((m,np.ones((len(m),1)))))
+            A = np.matrix(np.eye(s+1))
+            m = A * m.T
+            return m.T[:,:-1]
+        tr =  _identity_
+        tr.ref_vector = np.array([0.,0.,0.])
+        tr.ref_angle = None
+        return tr
     
     def translation_transform_for(v):
         """
@@ -208,8 +224,8 @@ class tpctree(object):
             return m.T[:,:-1]
         
         tr =  translation_transform
-        tr.ref_vector = tpctree._tr_ref_displacement_(tr)
-        tr.ref_angle = tpctree._tr_ref_angle_(tr)
+        tr.ref_vector,tr.ref_angle = tpctree._tr_refs_(tr)
+        
         return tr
     
     def __default_transformer__(X,Y):
@@ -220,31 +236,55 @@ class tpctree(object):
             print(repr(ex))
             return tpctree.find_translation(Y,X)
     
-    def best_transform(self, collection,lag=1):
-        """
-        Simply return the transform that minimises the objective with respect to the data
-        The data will be the point cloud at time [t] and [t-1]
-        """
-        best_index, best_tr, best_score = None, None, self._epsilon+1
-        self._transform_collection = []
-        for counter,tr in enumerate(collection):
-            if tr is None: continue
-            score = self.apply_transform(tr,False,lag=lag)
-            if score <= best_score: 
-                best_index, best_tr , best_score= counter,tr,score
-            #if collecting
-            self._transform_collection.append({"score": score, "tr": tr, "type":  tpctree.tr_type(tr)})
-            
-        self.merge_statistic("best_tr_index", best_index)
-        self.merge_statistic("best_tr_type", tpctree.tr_type(tr))
-        
-        return best_tr
+    #def best_transform(self, collection,lag=1):
+    #    """
+    #    Simply return the transform that minimises the objective with respect to the data
+    #    The data will be the point cloud at time [t] and [t-1]
+    #    """
+    #    best_index, best_tr, best_score = None, None, self._epsilon+1
+    #    self._transform_collection = []
+    #    for counter,tr in enumerate(collection):
+    #        if tr is None: continue
+    #        score = self.apply_transform(tr,False,lag=lag)
+    #        if score <= best_score: 
+    #            best_index, best_tr , best_score= counter,tr,score
+    #        #if collecting
+    #        self._transform_collection.append({"score": score, "tr": tr, "type":  tpctree.tr_type(tr)})
+    #        
+    #    self.merge_statistic("best_tr_index", best_index)
+    #    self.merge_statistic("best_tr_type", tpctree.tr_type(tr))
+    #    
+    #    return best_tr
     #####END TRANSFORMATIONS#######
         
     #def __eps_from_min_intertarget_distance__(self):
     #    #for each point in target, find the smallest distance between any two points
     #    #half this value and take the min of the max_epsilon (bio-feasible) and this value
     #    #rationale: adapt to the data up to a point. if we have some points very close together then we got the bio wrong or there is noise
+        
+    def __update__(self, lag=1):
+        t = self._t
+        if t-lag < 0:return
+        
+        scores = tpctree.translations_from_marriages(self[t-1],self[t] ,name="random_tr",eps = self._epsilon, add_concensus_best=self._use_tr_concensus)
+        #apply the best transform and assign ids
+        self.apply_transform(scores.iloc[0]["tr"],lag=lag)
+        
+        #consider check the last transform and new global affines here and re-apply
+        if self._transforms_enabled:
+            aftr_scores = tpctree.transformations_from_stored_marriages(self[t-lag],self[t], name="random_affine", eps=self._epsilon)
+            if aftr_scores is not None and aftr_scores.iloc[0]["score"] < scores.iloc[0]["score"]:
+                scores = pd.concat([scores,aftr_scores]).sort_values("score")
+                self.apply_transform(scores.iloc[0]["tr"],lag=lag)
+          
+        if lag == 1:
+            self._last_transform = scores.iloc[0]["tr"]
+            self.merge_statistic("best_tr_score", scores.iloc[0]["score"])
+            self.merge_statistic("best_tr_type", scores.iloc[0]["type"])
+            self.merge_statistic("best_tr_angle", scores.iloc[0]["trang"])
+            self.merge_statistic("best_tr_disp", scores.iloc[0]["trref"])
+            self._transform_collection = scores
+            self._rec_ref_angles_from_marriages_()
         
     def update(self, data,t=None): #unless t is given, auto-inc
         """
@@ -260,28 +300,7 @@ class tpctree(object):
             self.auto_fill_ids()
             return self.blobs
         
-        ##REFACTOR best transform here for any LAG -> apply_best_Transform
-        t = self._t
-        scores = tpctree.translations_from_marriages(self[t-1],self[t] ,name="random_tr",eps = self._epsilon, add_concensus_best=self._use_tr_concensus)
-        #apply the best transform and assign ids
-        self.apply_transform(scores.iloc[0]["tr"])
-        
-        #consider check the last transform and new global affines here and re-apply
-        if self._transforms_enabled:
-            aftr_scores = tpctree.transformations_from_stored_marriages(self[t-1],self[t], name="random_affine", eps=self._epsilon)
-            if aftr_scores is not None and aftr_scores.iloc[0]["score"] < scores.iloc[0]["score"]:
-                scores = pd.concat([scores,aftr_scores]).sort_values("score")
-                self.apply_transform(scores.iloc[0]["tr"])
-          
-        #from the sorted list take the best
-        self._last_transform = scores.iloc[0]["tr"]
-        self.merge_statistic("best_tr", scores.iloc[0]["score"])
-        self.merge_statistic("best_tr_type", scores.iloc[0]["type"])
-        self._transform_collection = scores
-        ## END BEST REFACTOR
-
-        #if self._alt_lags_enabled:#analytics
-        #    for _lag in [2,3]:  self.apply_best_transform(lag2,lag=_lag)
+        for l in reversed(sorted(self._lags)):  self.__update__(l)
             
         return self.blobs
     
@@ -299,7 +318,7 @@ class tpctree(object):
         newids = list(range(next_key, next_key+num_orphans))
         self.data.loc[self.data["t"] == self._t, "key"] = newids
     
-    def __validate_ids__(self,res,lag=1, angles=None):
+    def __validate_ids__(self,res,lag=1):
         """
         If the result is infinite, there is no neighbour within the ball of radius epsilon
         In such cases we should set the id to newly generated ids TODO
@@ -329,50 +348,74 @@ class tpctree(object):
         ids[invalid_mask ] = newids
         return np.array(ids,np.int)
         
-    def _tr_ref_angle_(tr):
+    def _tr_refs_(tr):
+        """
+        Get the displacement ref vector and the angle taking the displacement into account
+        it is either clockwise or anti-clocwise from the x-axis depending on the sign of the disp vector
+        """
+        d = tpctree._tr_ref_displacement_(tr)
+        sign = 1 if d[1] < 0 else -1
+        return d,tpctree._tr_ref_angle_(tr,sign)
+    
+    def _tr_ref_angle_(tr,sign=1):
         ref_vector = np.array([[2,2,2]])
         u = (np.array([[4,2,2]]) - ref_vector)[0]
         v =  tr(ref_vector)-ref_vector#returns a matrix
         v = np.array(v)[0]
-        return utils.angle(u,v)
+        return utils.angle(u,v)*sign
     
     def _tr_ref_displacement_(tr):
         ref_vector = np.array([[2,2,2]])
         u =  tr(ref_vector)-ref_vector#returns a matrix
         return np.array(u)[0]
     
-    def determine_angles(self,res,tr,lag=1):
-        """
-        For anisotropic catchment areas we need an angle between the reference transform angle and the actual married objects
-        If the angle is larger than a configured allowed the valid_ids will skip the marriage even if the objects are less than epsilon apart
-        """
-        def compute_angle(row):
-            first_ = np.array([row["x"], row["y"], row["z"]])
-            next_= np.array([row["xnext"], row["ynext"], row["znext"]])
-            v = next_-first_
-            #we are getting angle between this aribtrary reference vector along the supplied transform "tr" and the point displacement
-            u = tpctree._tr_ref_displacement_(tr)
-            self.merge_statistic("tr_ref_vector", tr.ref_vector)
-            self.merge_statistic("tr_ref_angle", tr.ref_angle)
-            
-            return utils.angle(u,v)
+    def _rec_ref_angles_from_marriages_(self,lag=1):
+        key_name = "key" if lag == 1 else "key"+str(lag)
+        pairing = self[self._t].set_index(key_name).join(self[self._t-lag].set_index(key_name),rsuffix='next')
+        pairing_angles = []
+        for k,row in pairing.iterrows():
+            u = row[["x","y","z"]].as_matrix()
+            v = row[["xnext","ynext","znext"]].as_matrix()
+            disp = v-u
+            sign = 1 if disp[1] < 0 else -1
+            xaxis = np.array([1,0,0])
+            angle = utils.angle(xaxis,disp)*sign
+            pairing_angles.append({"key": k, "angle": angle })
+        self.merge_statistic("marriage_angles", pairing_angles)
 
-        #self.merge_statistic("best_ref_vec", tr(np.array([[0,0,0]])))
-        
-        ids = res[1] #pointer to index on prev in ordinal not df.index space
-        valid_mask = np.where(res[0]<self._epsilon+1)[0]
-        #reset_index so we can join the same-size datasets in ordinal space
-        prev=self[self._t-lag].iloc[ids[valid_mask]].reset_index()
-        cur = self[self._t].iloc[valid_mask].reset_index()
-        cur = cur.join(prev, rsuffix="next")
-        #set the angles where valid in ordinal space using the t_offset for current data page
-        ids = np.array(valid_mask) + self._t_offset
-        angle_col_ordinal = list(self.data.columns).index("angles")
-        angles = list(cur.apply(compute_angle,axis=1))
-        try: self.data.iloc[ids, [angle_col_ordinal]] = angles
-        except: pass #not sure about this yet
- 
-        return self[self._t]["angles"]#return here because it gives index properly - some nan
+    #def determine_angles(self,res,tr,lag=1):
+    #    """
+    #    For anisotropic catchment areas we need an angle between the reference transform angle and the actual married objects
+    #    If the angle is larger than a configured allowed the valid_ids will skip the marriage even if the objects are less than epsilon apart
+    #    """
+    #    def compute_angle(row):
+    #        first_ = np.array([row["x"], row["y"], row["z"]])
+    #        next_= np.array([row["xnext"], row["ynext"], row["znext"]])
+    ##        v = next_-first_
+    #       #we are getting angle between this aribtrary reference vector along the supplied transform "tr" and the point displacement
+    #       u = tpctree._tr_ref_displacement_(tr)
+    #       self.merge_statistic("tr_ref_vector", tr.ref_vector)
+    #        self.merge_statistic("tr_ref_angle", tr.ref_angle)
+    #        
+    #        return utils.angle(u,v)#
+    #
+    #    #self.merge_statistic("best_ref_vec", tr(np.array([[0,0,0]])))
+    #    
+    #    ids = res[1] #pointer to index on prev in ordinal not df.index space
+    #    valid_mask = np.where(res[0]<self._epsilon+1)[0]
+    #    #reset_index so we can join the same-size datasets in ordinal space
+    #    prev=self[self._t-lag].iloc[ids[valid_mask]].reset_index()
+    #    cur = self[self._t].iloc[valid_mask].reset_index()
+    #    cur = cur.join(prev, rsuffix="next")
+    #    #set the angles where valid in ordinal space using the t_offset for current data page
+    #    ids = np.array(valid_mask) + self._t_offset
+    #    
+    #    angle_col_ordinal = list(self.data.columns).index("angles")
+    #    angles = list(cur.apply(compute_angle,axis=1))
+    #    try: self.data.iloc[ids, [angle_col_ordinal]] = angles
+    #    except: pass #not sure about this yet
+    # 
+    #    return self[self._t]["angles"]#return here because it gives index properly - some nan
         
     def __apply__(tr, X,Y,epsilon,columns=["x","y","z"]):
         """
@@ -400,17 +443,12 @@ class tpctree(object):
         if len(X) == 0 or len(Y) == 0:return -1
    
         res, score,TR = tpctree.__apply__(tr, X,Y,self._epsilon, self._columns)
-        
         key_name = "key" if lag == 1 else "key"+str(lag)
         #if key_name not in self.data.columns:self.data[key_name] = None #do i need this
         #minimise the number of things outside the base below as called much more often!
         if accept_pair:
-            #for anisop calc angles - haven chosen best independant of angles
-            angles = self.determine_angles(res,tr,lag)
-            #print("Accepting pair for lag", lag)
-            self._temp_res = np.array(res)
             #get the keys corresponding to the integer index returned from the kdtree
-            self.data.loc[self.data["t"] == self._t, key_name] = self.__validate_ids__(res,lag=lag,angles=angles)
+            self.data.loc[self.data["t"] == self._t, key_name] = self.__validate_ids__(res,lag=lag)
             #assign epsilons
             self.data.loc[self.data["t"] == self._t, "epsilon"+str(lag)] = tpctree.__normed_distance__(res[0],self._epsilon)
             #should always be possible to either assign or generate - null key not acceptable
@@ -422,8 +460,7 @@ class tpctree(object):
     def concensus_best_from_scores(t1, t2, scores, eps=DEFAULT_EPSILON, head_size=5):
         average_disp = np.stack(scores[0:head_size]["trref"].values).T.mean(axis=1)
         crowd_tr = tpctree.find_translation(np.array([[0,0,0]]),average_disp)
-        res, score,TR = tpctree.__apply__(crowd_tr, t1,t2,eps) 
-        
+        res, score,TR = tpctree.__apply__(crowd_tr, t1,t2,eps)       
         return crowd_tr, score
 
     def find_transform_from_dataframe_rows(df1,df2,point_ordinal_tuple):
@@ -432,16 +469,16 @@ class tpctree(object):
         Y= df2.iloc[point_ordinal_tuple[0]][["x","y","z"]].as_matrix()    
         return tpctree.find_translation(Y,X)
 
-    def transformations_from_stored_marriages(t1,t2, mar=None, name="handpicked",eps=DEFAULT_EPSILON):
+    def transformations_from_stored_marriages(t1,t2, lag=1, mar=None, name="handpicked",eps=DEFAULT_EPSILON):
         #this is done because we compare based on ordinals and we must ignore any other index
         t1 = t1.reset_index()
         t2 = t2.reset_index()
         rws = []
-        for x,y in tpctree.marriage_constellation_sampler(t1,t2):
+        for x,y in tpctree.marriage_constellation_sampler(t1,t2,lag=lag):
             try:
                 tr = tpctree.find_transform(y,x)
                 res, score,TR = tpctree.__apply__(tr, t1,t2, epsilon=eps)
-                d = {"score":score, "trang":tr.ref_angle, "trref": tr.ref_vector, "marriage":np.stack([x,y]), "tr":tr}
+                d = {"score":score, "trang":tr.ref_angle, "trref": tr.ref_vector, "tr_norm":np.linalg.norm( tr.ref_vector,ord=2), "marriage":np.stack([x,y]), "tr":tr}
                 rws.append(d)
             except:#not always possible for LSq to converge
                 pass
@@ -449,7 +486,8 @@ class tpctree(object):
         scores = pd.DataFrame(rws).sort_values("score").reset_index()
         scores["type"] = name
         scores = scores.join(pd.DataFrame(np.stack(scores["trref"].values),columns=["x","y","z"]))
-        return scores
+        
+        return scores.round(3).sort_values(["score", "tr_norm"])
     
     def translations_from_marriages(t1,t2, mar=None, name="handpicked",eps=DEFAULT_EPSILON,add_concensus_best=True,include_identity=True):
         """
@@ -467,17 +505,16 @@ class tpctree(object):
         for m in mar:
             tr = tpctree.find_transform_from_dataframe_rows(t1,t2,m)
             res, score,TR = tpctree.__apply__(tr, t1,t2, epsilon=eps)
-            d = {"score":score, "trang":tr.ref_angle, "trref": tr.ref_vector, "marriage":m, "tr":tr, "type": name}
+            d = {"score":score, "trang":tr.ref_angle, "trref": tr.ref_vector, "tr_norm":np.linalg.norm( tr.ref_vector,ord=2), "marriage":m, "tr":tr, "type": name}
             rws.append(d)
             
         if include_identity:
-            #columns are assumed to be length 3 - need to update these static methods with a way to pass col assumptions
-            #here i am using a small translation instead of idenity
-            tr = tpctree.translation_transform_for(0.01*np.ones((1,3)))
+            tr = tpctree.identity_transform(3)
             res, score,TR = tpctree.__apply__(tr, t1,t2, epsilon=eps)
-            d = {"score":score, "trang":tr.ref_angle, "trref": tr.ref_vector, "marriage":m, "tr":tr, "type": "identity"}
+            d = {"score":score, "trang":tr.ref_angle, "trref": tr.ref_vector, "tr_norm":np.linalg.norm( tr.ref_vector,ord=2), "marriage":None, "tr":tr, "type": "identity"}
             rws.append(d)
             
+        #TODO sort by score and then displacement so we dinstinguis small disp - also update identity to actual identity    
         scores = pd.DataFrame(rws).sort_values("score").reset_index()
         scores = scores.join(pd.DataFrame(np.stack(scores["trref"].values),columns=["x","y","z"]))
 
@@ -487,16 +524,18 @@ class tpctree(object):
             cb["type"] = "tr_conc_best"
             scores = pd.concat([scores,cb]).sort_values("score")
         
-        return scores
+        return scores.round(3).sort_values(["score", "tr_norm"])
     
     ###Samplers###
     def simple_sampler(df,columns=["x", "y", "z"]):  
         """simply sample all the points"""
         return df[columns].as_matrix()
 
-    def marriage_constellation_sampler(t1,t2, N=50, k=3):
+    def marriage_constellation_sampler(t1,t2,lag=1, N=50, k=3):
         #pair on marriages to find coordinates along a common spine
-        pairing = t1.join(t2,on='key',rsuffix='next')
+        #can deal with marriages made at each lag
+        key_name = "key" if lag == 1 else "key"+str(lag)
+        pairing = t1.join(t2,on=key_name,rsuffix='next')
         if(len(pairing)<k):return #nothing to do
         #find permutations of these 
         perms = np.array(list(combinations(pairing.index.values,k)))
@@ -549,3 +588,34 @@ class tpctree(object):
             ax.scatter(x=projected.x, y=projected.y, facecolors='none', edgecolors='b', s=area, label='projected')      
             plt.legend(loc=4, fontsize=20)
         return _call
+    
+    #refactor this out somewhere 
+    def plot_transition(self, t, transform_seed=None,epsilon=15):
+        from matplotlib import pyplot as plt
+        fig, (ax1, ax2,ax3) = plt.subplots(1, 3, figsize=(20, 8), tight_layout=True)
+        t1 = self[t].reset_index()
+        t2 = self[t+1].reset_index()
+        
+        if transform_seed is not None:
+            tr = tpctree.find_transform_from_dataframe_rows(t1,t2,transform_seed)
+            plots.add_projection_from_points(tr, t2, ax=ax3)
+            res, score,TR = tpctree.__apply__(tr, t1,t2,epsilon)
+            ax3.scatter(x=t2.x, y=t2.y, s=30, c='b')
+            ax3.scatter(x=t1.x, y=t1.y, s=20, c='g')
+            title = "proposed by taking {}->{} scoring {} (avg. dist.)".format(transform_seed[0],transform_seed[1],score)
+            ax3.set_title(title)
+            for k,r in t1.iterrows(): ax3.annotate(str(k), (r["x"],r["y"]+15),  ha='center', va='top', color='g', size=14)
+            for k,r in t2.iterrows(): ax3.annotate(str(k), (r["x"],r["y"]+10),  ha='center', va='top', color='b', size=14)
+
+        ax1.scatter(x=t1.x, y=t1.y, s=30, c='g')
+        ax2.scatter(x=t2.x, y=t2.y, s=30, c='b')
+        ax2.scatter(x=t1.x, y=t1.y, s=20, c='g')
+
+        for k,r in t1.iterrows(): ax1.annotate(str(k), (r["x"],r["y"]+10),  ha='center', va='top', color='g', size=14)
+        for k,r in t2.iterrows(): ax2.annotate(str(k), (r["x"],r["y"]+10),  ha='center', va='top', color='b', size=14)
+
+        for ax in [ax1,ax2]:
+            ax.minorticks_on()
+            ax.grid(which='major', linestyle='-', linewidth='0.5', color='grey')
+            ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
+            ax.set_ylim(ax.get_ylim()[::-1]) #flip
