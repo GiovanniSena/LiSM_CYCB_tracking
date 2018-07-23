@@ -42,13 +42,16 @@ def check_file_list(any_format,ignore_warnings=True, warnings=[]):
     
 import matplotlib
 from matplotlib import pyplot as plt
-import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 import numpy as np
 import matplotlib.patches as patches
 import matplotlib.lines as mlines
+from matplotlib.patches import Ellipse
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import math
-
+#this began as just two functions and I did not want to create a seperate class file
+#now I think we are starting to justify it
+#maybe create a plot_manager and import it in init as plots
 class plots(object):
     def __init__(self,stats):
         self._stats = stats
@@ -115,14 +118,18 @@ class plots(object):
         ax.scatter(x=projected.x, y=projected.y, facecolors='none', edgecolors='b', s=area, label='projected')  
         
     @staticmethod
-    def plot_proposal(t1,t2,tr,ax=None):
+    def plot_proposal(t1,t2,tr,ax=None,flip_axis=True,use_keys=True):
         if ax is None:  ax = plt.gca()
         plots.add_projection_from_points(tr, t2, ax=ax)
         ax.scatter(x=t2.x, y=t2.y, s=30, c='b')
         ax.scatter(x=t1.x, y=t1.y, s=20, c='g')
         #for k,r in t1.iterrows(): ax.annotate(str(k), (r["x"],r["y"]+15),  ha='center', va='top', color='g', size=14)
-        for k,r in t2.iterrows(): ax.annotate(str(k), (r["x"],r["y"]+10),  ha='center', va='top', color='b', size=14)
-
+        #we reset the index just to have a local ordinal
+        for k,r in t2.reset_index().iterrows(): 
+            _k = k if not use_keys else r["key"]
+            ax.annotate(str(_k), (r["x"],r["y"]+4),  ha='center', va='top', color='b', size=14)
+        if flip_axis: ax.set_ylim(ax.get_ylim()[::-1])
+        
     @staticmethod
     def plot_ref_vector( theta,radius=50, offset = [0,0], ax=None):
         if ax is None:  ax = plt.gca()

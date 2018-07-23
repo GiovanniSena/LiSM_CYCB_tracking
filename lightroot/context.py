@@ -198,10 +198,13 @@ class context(dict):
             self._iom.save(ax)
             #save the tracks to check point
             self._iom.save_file(self._tree.data,"data.csv", as_check_point=True)
+            self._iom.save_file(self._tree.stats,"tree_stats.csv", as_check_point=True)
             plt.close()
             
         #save the blob data actual
         self._iom.save_file(self._tree.data, "data.csv")
+        self._iom.save_file(self._tree.stats,"tree_stats.csv")
+        #todo dump tree statistics too
         #write extra files
         self._iom.save_file(self._tree.life_matrix, "life_matrix.csv")
         self._iom.save_file(tpctree.make_life_matrix(self._tree.data, restricted=True), "life_matrix_restricted.csv")
