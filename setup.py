@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='lightroot',
-    version='1.0',
+    version='1.1',
     author='Sirsh',
     author_email='amartey@gmail.com',
     license='MIT',
