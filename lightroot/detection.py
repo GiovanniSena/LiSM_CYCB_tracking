@@ -140,7 +140,7 @@ class preprocessing(object):
         #find the largest connected component using low band threshold
         region,mask = preprocessing.largest_region(im_>0.01,ctx)
         #select the original 3d using the mask
-        return preprocessing.select(im, region,mask)
+        return preprocessing.select(im, region, mask)
     
     @staticmethod
     def largest_region(im,ctx,props={}):

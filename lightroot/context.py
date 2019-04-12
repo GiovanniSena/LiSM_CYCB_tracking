@@ -89,6 +89,9 @@ class context(dict):
         if self.index not in self._stats:self._stats[self.index] = sdict
         else: self._stats[self.index].update(sdict)
         
+        #im not sure if i need to keep stats other than frame stats so ill merge them for now
+        #if "last_frame_stats" in self: self["last_frame_stats"].update(sdict)
+        
     def __load_settings__(self):
         import json
         fname = os.path.join(self["lightroot_folder"], "settings.json")

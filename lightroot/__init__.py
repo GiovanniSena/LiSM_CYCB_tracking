@@ -83,7 +83,7 @@ class plots(object):
             newpoint = rotate((2,0),ang)
             arrow = patches.Arrow(0,0,newpoint[0], newpoint[1],  width=0.2)
             ax.add_patch(arrow)
-            plt.legend([arrow], ['Global Transform'])
+            plt.legend([arrow], ['Global Transformation'])
 
         def plot_angle_vector(ang,ax,c='k',annotation='x'):
             newpoint = rotate((2,0),ang)
@@ -166,7 +166,7 @@ class plots(object):
         return fig
 
     @staticmethod
-    def frame_stats(df, file="./frame_stats.pdf"):
+    def frame_stats(df, file="./frame_stats.pdf", fontsize=16):
         """
         This will be refactored into something more general - here we hard code just to keep track of the charts
         """
@@ -180,21 +180,23 @@ class plots(object):
         ax1.plot(temp.index, [.1 for i in temp.index], '--',color='k')
         ax1.fill_between(temp.index, 0.01,0.045, facecolor='blue', alpha=0.1)
         ax1.set( ylabel='Noise')
-        ax1.yaxis.label.set_size(16)
+        ax1.yaxis.label.set_size(fontsize)
 
         ax2.plot(temp.index, temp.pseudo_ent/10, ':')
         ax2.plot(temp.index, [0.01 for i in temp.index], '--',color='k')
         ax2.set(ylabel='Signal',)
-        ax2.yaxis.label.set_size(16)
-        ax2.xaxis.label.set_size(16)
+        ax2.yaxis.label.set_size(fontsize)
+        ax2.xaxis.label.set_size(fontsize)
 
         ax3.plot(temp.index, temp["2dhist95pre"]/10, ':')
         ax3.plot(temp.index, temp["2dhist99pre"]/10, ':')
         ax3.fill_between(temp.index,temp["2dhist95pre"]/10,temp["2dhist99pre"]/10, facecolor='blue', alpha=0.1)
         ax3.set( ylabel='Narrow-band')#xlabel='Frame index',
-        ax3.yaxis.label.set_size(16)
+        ax3.yaxis.label.set_size(fontsize)
         ax3.set_ylim(0,1)
 
+        plt.xlabel("Time (15 minute intervals)",fontsize=fontsize)
+        
         plt.xlim(0,100)
         plt.subplots_adjust(hspace=0.1)
         fig.savefig(file,bbox_inches='tight')    

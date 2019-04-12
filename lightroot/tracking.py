@@ -30,6 +30,7 @@ class tpctree(object):
         self._use_tr_concensus = True if "use_tr_concensus" not in options else options["use_tr_concensus"]
         self._angle_tresh = 90 if "angle_tresh" not in options else options["angle_tresh"]
         self._use_data_t = True if "use_data_t" not in options else options["use_data_t"]
+        self._sample_size =  50 if "sample_size" not in options else options["sample_size"]
         #temp - need an aspects for this
         self._debug = False if "debug" not in options else options["debug"]
         
@@ -103,7 +104,7 @@ class tpctree(object):
         def age_at(t,i):return ageMat[t][i]
         def age_at_px(row): return age_at(row["t"],row["key"])
         def max_age_at(t,i):return ageMat.iloc[i].max()
-        def max_age_at_px(row): return max_age_at(row["t"],row["key"])
+        def max_age_at_px(row): return max_age_at(row["t"],row["key"]) 
         data["age"]=data.reset_index().apply(age_at_px, axis=1)
         data["max_age"]=data.reset_index().apply(max_age_at_px, axis=1)
         return data
@@ -160,15 +161,18 @@ class tpctree(object):
         #TODO - a smart constellation pair sampler where we first evaluate translations to create points that exist in both frames and then select 
         #the same id permutation in each one possibly with some randomness??
         #can the general affine transform improve the match??
-        
+        print("getting transforms")
         #general
         if self._transforms_enabled:
             try:
+                print("applying transforms", self._sample_size)
                 #generalised transforms
-                for v in tpctree.constellation_sampler(t1[self._columns]):
-                    for w in tpctree.constellation_sampler(t2[self._columns]):
+                for v in tpctree.constellation_sampler(t1[self._columns],N=self._sample_size):
+                    for w in tpctree.constellation_sampler(t2[self._columns], N=self._sample_size):
                         yield tpctree.find_transform(w,v)
-            except:
+                print("done applying transforms", self._sample_size)
+            except Exception as ex:
+                print("failed sampling", repr(ex))
                 pass
                 #self.merge_statistic("failed_sample_transform", True)
     
@@ -187,7 +191,7 @@ class tpctree(object):
     
     def find_translation(X,Y): 
         """Given two matrices, compute the simple translation
-           it as assumed the point subsets represent likely congruences and the mean translation vector us used
+           it as assumed the point subsets represent likely congruences and the mean translation vector is used
         """
         mean_vec = np.array(Y)-np.array(X)
         if len(mean_vec.shape) == 1:  mean_vec = np.stack([mean_vec])
@@ -290,7 +294,8 @@ class tpctree(object):
         
         #consider check the last transform and new global affines here and re-apply
         if self._transforms_enabled:
-            aftr_scores = tpctree.transformations_from_stored_marriages(self[t-lag],self[t], name="random_affine", eps=self._epsilon)
+            
+            aftr_scores = tpctree.transformations_from_stored_marriages(self[t-lag],self[t], name="random_affine", eps=self._epsilon, sample_size=self._sample_size)
             if aftr_scores is not None and aftr_scores.iloc[0]["score"] < scores.iloc[0]["score"]:
                 scores = tpctree.__score_sort__(pd.concat([scores,aftr_scores]))
                 self.apply_transform(scores.iloc[0]["tr"],lag=lag)
@@ -508,12 +513,13 @@ class tpctree(object):
                 "tr":tr, 
                 "type": trtype}
     
-    def transformations_from_stored_marriages(t1,t2, lag=1, mar=None, name="handpicked",eps=DEFAULT_EPSILON):
+    def transformations_from_stored_marriages(t1,t2, lag=1, mar=None, name="handpicked",eps=DEFAULT_EPSILON,sample_size=None):
         #this is done because we compare based on ordinals and we must ignore any other index
         t1 = t1.reset_index()
         t2 = t2.reset_index()
         rws = []
-        for x,y in tpctree.marriage_constellation_sampler(t1,t2,lag=lag):
+        #print("appling transforms with samples", sample_size)
+        for x,y in tpctree.marriage_constellation_sampler(t1,t2,lag=lag,N=sample_size):
             try:
                 tr = tpctree.find_transform(y,x)
                 rws.append(tpctree.__apply_get_dict__(tr, t1,t2, epsilon=eps,trtype="affine_general", seed_marriages=np.stack([x,y])))
@@ -586,7 +592,7 @@ class tpctree(object):
             v = pairing.iloc[p][["xnext","ynext","znext"]].as_matrix()
             yield u,v
 
-    def constellation_sampler(df, k=3, N=50,min_angle=20,min_length=20):
+    def constellation_sampler(df, k=3, N=100,min_angle=20,min_length=20):
         """
         Find constellations - parameters are
         k: number of points in the constellation

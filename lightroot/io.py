@@ -230,7 +230,7 @@ class io_manager(object):
     
     def log_message(self, m, mtype="INFO"):
         index = "({})".format(self._ctx.index) if self._ctx.index >= 0 else ""
-        record = "{}|{}|{}:>{}".format(time.strftime('%d/%m/%Y %H:%M:%S'), mtype, index, m)
+        record = "{}|{}|{}|:>{}".format(time.strftime('%d/%m/%Y %H:%M:%S'), mtype, index, m)
         if not self._ctx.show_progress: print(record)
         with open(os.path.join(self._out_dir, "log.txt"), "a") as f:  f.write(record+"\n");
  
