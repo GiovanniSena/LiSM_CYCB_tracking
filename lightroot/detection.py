@@ -155,7 +155,9 @@ class preprocessing(object):
             if p.area > largest:largest,R = p.area,p   
         #record usefull frame statistics
         if R is None: return None,im
-        ctx["last_frame_stats"]["bbox_area"], ctx.bbox = largest,R.bbox
+        ctx["last_frame_stats"]["bbox_area"], ctx.bbox = largest, R.bbox
+        ctx["last_frame_stats"]["bbox"] = R.bbox
+        
         ctx.log_stats({"bbox_area": largest})
         ctx.log_stats({"bbox": R.bbox})
         
