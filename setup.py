@@ -3,9 +3,9 @@ from setuptools import setup, find_packages
 
 setup(
     name='lightroot',
-    version='1.1',
-    author='Sirsh',
-    author_email='amartey@gmail.com',
+    version='0.1',
+    author='s.amarteifio14@imperial.ac.uk',
+    author_email='s.amarteifio14@imperial.ac.uk',
     license='MIT',
     url='git@https://github.com/GiovanniSena/LSFM_CYCB_analysis_v2',
     keywords='root microscopy tracking fuzzy registration',
