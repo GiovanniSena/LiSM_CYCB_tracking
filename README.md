@@ -9,7 +9,7 @@ python run.py [DATA_DIRECTORY]
 ~~~~
 
 ## From where can I get sample data?
-The data directory is a folder containing TIFF files. Sample data can be downloaded from [here](https://imperialcollegelondon.box.com/v/Amarteifio2019). Download the data to [DATA_DIRECTORY]. For example, within the project directory `LSFM_CYCB_analysis_v2`, create a folder called `samples` and download and extract the data to 'samples/Cut_Root_192. _This assumes there is a folder called `Cut_Root_192` containing TIFF files at the top level_. Then run
+The data directory is a folder containing TIFF files. Sample data can be downloaded from [here](https://imperialcollegelondon.app.box.com/s/3ekwwqhpqnhz0hz5cgqtwob0obgx4ote). Download the data to [DATA_DIRECTORY]. For example, within the project directory `LSFM_CYCB_analysis_v2`, create a folder called `samples` and download and extract the data to 'samples/Cut_Root_192. _This assumes there is a folder called `Cut_Root_192` containing TIFF files at the top level_. Then run
 ~~~~
 python run.py ./samples/Cut_Root_192
 ~~~~
